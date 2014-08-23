@@ -17,5 +17,6 @@ local function test(n)
 end
 
 print(monitor.depth(test, 10))
+print(monitor.depth(8, test, 10))
 print(monitor.report(test, 10))
 print(monitor.detailreport(test, 10))

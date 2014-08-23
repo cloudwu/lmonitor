@@ -11,6 +11,7 @@ struct status {
 	int depth;
 	int calls;
 	int ptr;
+	int from;
 	int count;
 	char buffer[REPORT_MAX];
 };
@@ -24,6 +25,7 @@ monitor_init(struct status * st) {
 	st->calls = 0;
 	st->ptr = 0;
 	st->count = 0;
+	st->from = 0;
 }
 
 static void
@@ -90,6 +92,26 @@ monitor_detailreport(lua_State *L, lua_Debug *ar) {
 }
 
 static void 
+monitor_depthfrom(lua_State *L, lua_Debug *ar) {
+	struct status * s = G;
+	switch (ar->event) {
+	case LUA_HOOKCALL:
+	case LUA_HOOKTAILCALL:
+		if (++s->depth > s->max_depth) {
+			++s->max_depth;
+		}
+		break;
+	case LUA_HOOKRET:
+		--s->depth;
+		++s->calls;
+		if (s->calls > s->from) {
+			lua_sethook(L, monitor_detailreport, LUA_MASKCALL | LUA_MASKRET | LUA_MASKLINE, 0);
+		}
+		break;
+	}
+}
+
+static void 
 monitor_report(lua_State *L, lua_Debug *ar) {
 	char info[FNAME_MAX];
 	struct status * s = G;
@@ -134,14 +156,21 @@ lreport(lua_State *L) {
 static int
 ldepth(lua_State *L) {
 	monitor_init(G);
-	luaL_checktype(L, 1, LUA_TFUNCTION);
-	lua_sethook(L, monitor_depth, LUA_MASKCALL | LUA_MASKRET, 0);
 	int args = lua_gettop(L) - 1;
+	if (!lua_isfunction(L, 1)) {
+		int n = luaL_checkinteger(L, 1);
+		G->from = n;
+		--args;
+		lua_sethook(L, monitor_depthfrom, LUA_MASKCALL | LUA_MASKRET, 0);
+	} else {
+		lua_sethook(L, monitor_depth, LUA_MASKCALL | LUA_MASKRET, 0);
+	}
 	lua_call(L, args, 0);
 	lua_sethook(L, NULL, 0 , 0);
 	lua_pushinteger(L, G->max_depth);
 	lua_pushinteger(L, G->calls);
-	return 2;
+	lua_pushlstring(L, G->buffer, G->ptr);
+	return 3;
 }
 
 static int
