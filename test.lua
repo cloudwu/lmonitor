@@ -9,3 +9,6 @@ local function test(n)
 end
 
 print(monitor.depth(test, 10))
+
+
+print(monitor.report(test, 3))
