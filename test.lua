@@ -1,4 +1,5 @@
 local monitor = require "monitor"
+local print_r = require "print_r"
 
 local function test(n)
 	if n == 0 then
@@ -11,4 +12,4 @@ end
 print(monitor.depth(test, 10))
 
 
-print(monitor.report(test, 3))
+print(monitor.report(print_r, _G))

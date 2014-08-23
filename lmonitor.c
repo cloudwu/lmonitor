@@ -59,22 +59,21 @@ monitor_report(lua_State *L, lua_Debug *ar) {
 	switch (ar->event) {
 	case LUA_HOOKCALL:
 	case LUA_HOOKTAILCALL:
+		if (ar->name != NULL) {
+			n = snprintf(info, FNAME_MAX, "%*s%s\n", s->depth, "", ar->name);
+		} else if (ar->linedefined < 0) {
+			n = snprintf(info, FNAME_MAX, "%*s=\n", s->depth, "");
+		} else {
+			n = snprintf(info, FNAME_MAX, "%*s%s:%d\n", s->depth, "", ar->short_src, ar->linedefined);
+		}
+		monitor_cat(s, info, n);
 		if (++s->depth > s->max_depth) {
 			++s->max_depth;
 		}
-		if (ar->name != NULL) {
-			n = snprintf(info, FNAME_MAX, "%s(", ar->name);
-		} else if (ar->linedefined < 0) {
-			n = snprintf(info, FNAME_MAX, "(");
-		} else {
-			n = snprintf(info, FNAME_MAX, "%s:%d(", ar->short_src, ar->linedefined);
-		}
-		monitor_cat(s, info, n);
 		break;
 	case LUA_HOOKRET:
 		--s->depth;
 		++s->calls;
-		monitor_cat(s, ")", 1);
 		break;
 	}
 }
