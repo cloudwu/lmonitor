@@ -37,21 +37,28 @@ monitor_cat(struct status * st, const char * str, size_t sz) {
 	st->ptr += sz;
 }
 
-static void 
-monitor_depth(lua_State *L, lua_Debug *ar) {
-	struct status * s = G;
-	switch (ar->event) {
+static void
+recordcall(struct status *s, int event) {
+	switch (event) {
 	case LUA_HOOKCALL:
 	case LUA_HOOKTAILCALL:
 		if (++s->depth > s->max_depth) {
-			++s->max_depth;
+			s->max_depth = s->depth;
 		}
 		break;
 	case LUA_HOOKRET:
 		--s->depth;
 		++s->calls;
 		break;
+	case LUA_HOOKLINE:
+		s->count ++;
+		break;
 	}
+}
+
+static void 
+monitor_depth(lua_State *L, lua_Debug *ar) {
+	recordcall(G, ar->event);
 }
 
 static void 
@@ -71,44 +78,30 @@ monitor_detailreport(lua_State *L, lua_Debug *ar) {
 			n = snprintf(info, FNAME_MAX, "%d\n%*s%s:%d ", s->count, s->depth, "", ar->short_src, ar->linedefined);
 		}
 		monitor_cat(s, info, n);
-		if (++s->depth > s->max_depth) {
-			++s->max_depth;
-		}
 		s->count = 0;
 		break;
 	case LUA_HOOKRET:
-		--s->depth;
-		++s->calls;
 		if (s->count > 0) {
 			n = snprintf(info, FNAME_MAX, "%d\n%*s", s->count, s->depth,"");
 			monitor_cat(s, info, n);
 			s->count = 0;
 		}
 		break;
-	case LUA_HOOKLINE:
-		s->count ++;
-		break;
 	}
+	recordcall(s, ar->event);
 }
 
 static void 
 monitor_depthfrom(lua_State *L, lua_Debug *ar) {
 	struct status * s = G;
 	switch (ar->event) {
-	case LUA_HOOKCALL:
-	case LUA_HOOKTAILCALL:
-		if (++s->depth > s->max_depth) {
-			++s->max_depth;
-		}
-		break;
 	case LUA_HOOKRET:
-		--s->depth;
-		++s->calls;
 		if (s->calls > s->from) {
 			lua_sethook(L, monitor_detailreport, LUA_MASKCALL | LUA_MASKRET | LUA_MASKLINE, 0);
 		}
 		break;
 	}
+	recordcall(s, ar->event);
 }
 
 static void 
@@ -128,15 +121,9 @@ monitor_report(lua_State *L, lua_Debug *ar) {
 			n = snprintf(info, FNAME_MAX, "%*s%s:%d\n", s->depth, "", ar->short_src, ar->linedefined);
 		}
 		monitor_cat(s, info, n);
-		if (++s->depth > s->max_depth) {
-			++s->max_depth;
-		}
-		break;
-	case LUA_HOOKRET:
-		--s->depth;
-		++s->calls;
 		break;
 	}
+	recordcall(s, ar->event);
 }
 
 static int
