@@ -11,6 +11,7 @@ struct status {
 	int depth;
 	int calls;
 	int ptr;
+	int count;
 	char buffer[REPORT_MAX];
 };
 
@@ -22,6 +23,7 @@ monitor_init(struct status * st) {
 	st->depth = 0;
 	st->calls = 0;
 	st->ptr = 0;
+	st->count = 0;
 }
 
 static void
@@ -46,6 +48,43 @@ monitor_depth(lua_State *L, lua_Debug *ar) {
 	case LUA_HOOKRET:
 		--s->depth;
 		++s->calls;
+		break;
+	}
+}
+
+static void 
+monitor_detailreport(lua_State *L, lua_Debug *ar) {
+	char info[FNAME_MAX];
+	struct status * s = G;
+	int n;
+	lua_getinfo(L, "nS", ar);
+	switch (ar->event) {
+	case LUA_HOOKCALL:
+	case LUA_HOOKTAILCALL:
+		if (ar->name != NULL) {
+			n = snprintf(info, FNAME_MAX, "%d\n%*s%s ", s->count, s->depth, "", ar->name);
+		} else if (ar->linedefined < 0) {
+			n = snprintf(info, FNAME_MAX, "%d\n%*s= ", s->count, s->depth, "");
+		} else {
+			n = snprintf(info, FNAME_MAX, "%d\n%*s%s:%d ", s->count, s->depth, "", ar->short_src, ar->linedefined);
+		}
+		monitor_cat(s, info, n);
+		if (++s->depth > s->max_depth) {
+			++s->max_depth;
+		}
+		s->count = 0;
+		break;
+	case LUA_HOOKRET:
+		--s->depth;
+		++s->calls;
+		if (s->count > 0) {
+			n = snprintf(info, FNAME_MAX, "%d\n%*s", s->count, s->depth,"");
+			monitor_cat(s, info, n);
+			s->count = 0;
+		}
+		break;
+	case LUA_HOOKLINE:
+		s->count ++;
 		break;
 	}
 }
@@ -79,6 +118,20 @@ monitor_report(lua_State *L, lua_Debug *ar) {
 }
 
 static int
+lreport(lua_State *L) {
+	monitor_init(G);
+	luaL_checktype(L, 1, LUA_TFUNCTION);
+	lua_sethook(L, monitor_report, LUA_MASKCALL | LUA_MASKRET, 0);
+	int args = lua_gettop(L) - 1;
+	lua_call(L, args, 0);
+	lua_sethook(L, NULL, 0 , 0);
+	lua_pushinteger(L, G->max_depth);
+	lua_pushinteger(L, G->calls);
+	lua_pushlstring(L, G->buffer, G->ptr);
+	return 3;
+}
+
+static int
 ldepth(lua_State *L) {
 	monitor_init(G);
 	luaL_checktype(L, 1, LUA_TFUNCTION);
@@ -92,10 +145,10 @@ ldepth(lua_State *L) {
 }
 
 static int
-lreport(lua_State *L) {
+ldetailreport(lua_State *L) {
 	monitor_init(G);
 	luaL_checktype(L, 1, LUA_TFUNCTION);
-	lua_sethook(L, monitor_report, LUA_MASKCALL | LUA_MASKRET, 0);
+	lua_sethook(L, monitor_detailreport, LUA_MASKCALL | LUA_MASKRET | LUA_MASKLINE, 0);
 	int args = lua_gettop(L) - 1;
 	lua_call(L, args, 0);
 	lua_sethook(L, NULL, 0 , 0);
@@ -111,6 +164,7 @@ luaopen_monitor(lua_State *L) {
 	luaL_Reg l[] = {
 		{ "depth", ldepth },
 		{ "report", lreport },
+		{ "detailreport", ldetailreport },
 		{ NULL, NULL },
 	};
 	luaL_newlib(L,l);

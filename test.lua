@@ -1,15 +1,21 @@
 local monitor = require "monitor"
-local print_r = require "print_r"
+
+local function foo()
+	return
+end
 
 local function test(n)
 	if n == 0 then
 		return
 	end
-	print ("hello word" , n)
+	for i=1,n do
+	end
+	foo()
+	for i=1,n do
+	end
 	return test(n-1)
 end
 
 print(monitor.depth(test, 10))
-
-
-print(monitor.report(print_r, _G))
+print(monitor.report(test, 10))
+print(monitor.detailreport(test, 10))
